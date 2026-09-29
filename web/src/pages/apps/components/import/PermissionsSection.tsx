@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { WizardConfig } from '@/services/types';
+import { videoStreamLabelKey } from '../../lib/permissionLabels';
 
 export interface PermissionsSectionProps {
   config: WizardConfig;
@@ -75,7 +76,10 @@ export default function PermissionsSection({
                       className="sr-only"
                     />
                     <span className="text-sm">
-                      {stream.stream_id}
+                      {(() => {
+                        const key = videoStreamLabelKey(stream.stream_id);
+                        return key ? t(key) : stream.stream_id;
+                      })()}
                       {stream.width && stream.height && (
                         <span className="text-xs text-gray-400 ml-1">
                           ({stream.width}x{stream.height}
