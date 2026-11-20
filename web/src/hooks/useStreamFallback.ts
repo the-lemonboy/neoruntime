@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isHevcSupported } from '@/lib/videoStream/hevcSupport';
 import { getItem, setItem } from '@/utils/storage';
 import type { MediaStreamStatus } from '@/hooks/useMediaStatus';
 
@@ -53,41 +52,21 @@ export interface UseStreamFallbackResult {
   codecNotice: CodecNotice;
 }
 
-/**
- * Shared codec-fallback logic for the live `Player` on the media page and the
- * devices Overlay tab.
- *
- * - Probes HEVC MSE support once (`isHevcSupported`); when the browser can't
- *   decode H.265 we proactively play an H.264 stream instead of letting the
- *   player fail with codecMismatch.
- * - In a browser without HEVC support the notice is persistent: it stays up
- *   even when the stream is (or has been switched to) H.264.
- * - Reactive safety net: if the real codec probe (pickMimeCodec, using the
- *   actual SPS) fails after connect (window `wv_error` with
- *   `detail.type === 'codec_mismatch'`), fall back to an H.264 stream.
- * - Resets the reactive fallback whenever the user switches streams.
- *
- * Behavior-preserving extract from `pages/media/index.tsx`.
- */
+/** Try the selected stream first; switch only after a fatal codec error. */
 export function useStreamFallback({
   streams,
   activeStream,
 }: UseStreamFallbackArgs): UseStreamFallbackResult {
-  // Reactive fallback set when the player fires codec_mismatch at runtime
-  // (real SPS-derived codec unsupported even though the pre-probe said OK).
+  // React only after the player has exhausted its codec fallback options.
   const [reactiveFallbackId, setReactiveFallbackId] = useState<string | null>(
     null
   );
   const [reactiveNoH264, setReactiveNoH264] = useState(false);
 
-  // Probe HEVC MSE support once.
-  const hevcSupported = useMemo(() => isHevcSupported(), []);
-
   // activeStream stays as the user's selection; effectiveStreamId is what we
   // actually feed to the player.
   const { effectiveStreamId, effectiveStreamInfo, codecNotice } = useMemo(() => {
     const selected = streams.find(s => s.stream_id === activeStream);
-    const selectedCodec = (selected?.codec ?? 'h264').toLowerCase();
 
     // Reactive override (codec_mismatch fired at runtime) takes precedence.
     if (reactiveFallbackId) {
@@ -106,33 +85,12 @@ export function useStreamFallback({
       };
     }
 
-    if (selectedCodec !== 'h265' || hevcSupported) {
-      return {
-        effectiveStreamId: activeStream,
-        effectiveStreamInfo: selected,
-        // Keep the notice visible for unsupported browsers on pages that show it.
-        codecNotice: hevcSupported
-          ? null
-          : ('hevc_unsupported_fallback' as CodecNotice),
-      };
-    }
-
-    // Selected stream is H.265 but browser can't decode it — fall back to H.264.
-    const fallback = findH264Fallback(streams, activeStream);
-    if (fallback) {
-      return {
-        effectiveStreamId: fallback.stream_id,
-        effectiveStreamInfo: fallback,
-        codecNotice: 'hevc_unsupported_fallback' as CodecNotice,
-      };
-    }
-
     return {
       effectiveStreamId: activeStream,
       effectiveStreamInfo: selected,
-      codecNotice: 'hevc_unsupported_no_h264' as CodecNotice,
+      codecNotice: null,
     };
-  }, [activeStream, streams, hevcSupported, reactiveFallbackId, reactiveNoH264]);
+  }, [activeStream, streams, reactiveFallbackId, reactiveNoH264]);
 
   // Reset reactive fallback when the user switches streams.
   useEffect(() => {
@@ -140,8 +98,7 @@ export function useStreamFallback({
     setReactiveNoH264(false);
   }, [activeStream]);
 
-  // Reactive safety net: if the real codec probe (pickMimeCodec, using the
-  // actual SPS) fails after connect, fall back to an H.264 stream.
+  // Fall back to an H.264 stream after a fatal codec mismatch.
   useEffect(() => {
     const onWvError = (e: Event) => {
       const { detail } = e as CustomEvent<{ type?: string }>;

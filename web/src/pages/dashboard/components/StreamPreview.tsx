@@ -14,6 +14,7 @@ import Player from '@/components/player/player';
 import { VideoStreamPlayer } from '@/lib/videoStream/player';
 import Loading from '@/components/loading';
 import { Button } from '@/components/ui/button';
+import { selectPreviewStream } from './previewStream';
 
 type StreamStatus =
   | 'loading'
@@ -31,9 +32,10 @@ export default function StreamPreview() {
   const [videoUrl, setVideoUrl] = useState('');
   const { data: mediaStatus, isLoading, error } = useMediaStatus();
   const streams = mediaStatus?.streams ?? [];
+  const previewStreamId = selectPreviewStream(streams);
   const { effectiveStreamId } = useStreamFallback({
     streams,
-    activeStream: 'sub',
+    activeStream: previewStreamId,
   });
 
   const getStreamUrl = useCallback((streamId: string) => {
@@ -88,7 +90,7 @@ export default function StreamPreview() {
       const { detail } = e as CustomEvent<{ type?: string }>;
       if (
         detail?.type === 'codec_mismatch'
-        && findH264Fallback(streams, 'sub') !== null
+        && findH264Fallback(streams, previewStreamId) !== null
       ) {
         codecFallbackPendingRef.current = true;
         setStatus('loading');
@@ -105,7 +107,7 @@ export default function StreamPreview() {
       window.removeEventListener('wv_close', handleClose);
       window.removeEventListener('wv_error', handleError);
     };
-  }, [videoUrl, streams]);
+  }, [videoUrl, streams, previewStreamId]);
 
   const getStatusContent = () => {
     switch (status) {

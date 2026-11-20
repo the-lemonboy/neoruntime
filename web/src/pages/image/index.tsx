@@ -1,9 +1,10 @@
 // @refresh reset
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import { VideoStreamPlayer } from '@/lib/videoStream/player';
 import Player from '@/components/player/player';
+import { SoftwareHevcNotice, useSoftwareHevcNotice } from '@/components/player/software-hevc-notice';
 import { getItem } from '@/utils/storage';
 import ImagingControls from './components/ImagingControls';
 import ImageSettings from './components/ImageSettings';
@@ -14,7 +15,6 @@ import PrivacyMaskOverlayLayer from './components/PrivacyMaskOverlayLayer';
 import { useOsdConfig, type StreamName } from './hooks/useOsdConfig';
 import { usePrivacyMaskConfig } from './hooks/usePrivacyMaskConfig';
 import { useMediaStatus } from '@/hooks/useMediaStatus';
-import { isHevcSupported } from '@/lib/videoStream/hevcSupport';
 import { useCapabilities } from '@/hooks/useDeviceControl';
 
 type TabKey = 'imaging' | 'image' | 'overlay';
@@ -42,15 +42,15 @@ export default function Image() {
   // so switching tabs unmounted+remounted the player and re-initialized the
   // websocket/decoder. Lifted here so only the sidebar + overlay layers swap.
   const playerRef = useRef<VideoStreamPlayer | null>(null);
+  const softwareNotice = useSoftwareHevcNotice();
   const [playbackFrameSize, setPlaybackFrameSize] = useState<{
     width: number;
     height: number;
   } | null>(null);
   const activeStreamInfo = streams.find(stream => stream.stream_id === activeStream);
   const codec = activeStreamInfo?.codec?.toLowerCase();
-  const hevcSupported = useMemo(() => isHevcSupported(), []);
   const [codecMismatch, setCodecMismatch] = useState(false);
-  const unsupportedPreview = codec === 'h265' && (!hevcSupported || codecMismatch);
+  const unsupportedPreview = codec === 'h265' && codecMismatch;
   const frameWidth = playbackFrameSize?.width ?? activeStreamInfo?.width;
   const frameHeight = playbackFrameSize?.height ?? activeStreamInfo?.height;
 
@@ -105,6 +105,7 @@ export default function Image() {
     <div className="flex h-full w-full flex-col overflow-hidden bg-background md:flex-row">
       {/* Main Content Area — player persists across tab switches */}
       <div className="flex w-full shrink-0 flex-col items-center justify-center px-3 pt-2 pb-1 md:h-full md:min-h-0 md:flex-1 md:shrink md:px-4 md:pb-4">
+        {softwareNotice.visible && <SoftwareHevcNotice onDismiss={softwareNotice.dismiss} />}
         <div
           className="relative aspect-video w-full max-w-full overflow-hidden rounded-xl bg-black md:max-w-none md:rounded-2xl"
           onPointerDown={() => {
@@ -122,6 +123,7 @@ export default function Image() {
             </div>
           ) : (
           <Player
+            onSoftwareHevcChange={softwareNotice.onChange}
             videoUrl={currentStreamUrl}
             videoRendererInstance={playerRef}
             streamWidth={frameWidth}

@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import { VideoStreamPlayer } from '@/lib/videoStream/player';
 import Player from '@/components/player/player';
+import { SoftwareHevcNotice, useSoftwareHevcNotice } from '@/components/player/software-hevc-notice';
 import MediaSettings from './components/MediaSettings';
 import { getItem } from '@/utils/storage';
 import { useMediaStatus } from './hooks/useMedia';
-import { isHevcSupported } from '@/lib/videoStream/hevcSupport';
 
 export default function Monitoring() {
   const { t } = useTranslation();
   const playerRef = useRef<VideoStreamPlayer | null>(null);
+  const softwareNotice = useSoftwareHevcNotice();
 
   const [activeStream, setActiveStream] = useState<'main' | 'sub' | 'third'>(
     'main'
@@ -23,7 +24,6 @@ export default function Monitoring() {
   const streams = mediaStatus?.streams ?? [];
 
   const activeStreamInfo = streams.find(stream => stream.stream_id === activeStream);
-  const hevcSupported = useMemo(() => isHevcSupported(), []);
   const [codecMismatch, setCodecMismatch] = useState(false);
   const codec = activeStreamInfo?.codec?.toLowerCase();
 
@@ -40,7 +40,7 @@ export default function Monitoring() {
     return () => window.removeEventListener('wv_error', handleError);
   }, []);
 
-  const unsupportedPreview = codec === 'h265' && (!hevcSupported || codecMismatch);
+  const unsupportedPreview = codec === 'h265' && codecMismatch;
 
   const handleStreamChange = (streamId: string) => {
     if (streamId === 'main' || streamId === 'sub' || streamId === 'third') {
@@ -88,6 +88,7 @@ export default function Monitoring() {
     <div className="flex h-full w-full flex-col overflow-hidden bg-background md:flex-row">
       {/* Main Content Area */}
       <div className="flex w-full shrink-0 flex-col items-center justify-center pt-2 pb-1 md:h-full md:min-h-0 md:flex-1 md:shrink px-4 md:py-0">
+        {softwareNotice.visible && <SoftwareHevcNotice onDismiss={softwareNotice.dismiss} />}
         <div className="relative aspect-video w-full max-w-full overflow-hidden rounded-xl bg-black my-2 md:max-w-none md:rounded-2xl">
           {unsupportedPreview ? (
             <div className="flex h-full items-center justify-center gap-2 px-6 text-center text-sm text-white" role="status">
@@ -96,6 +97,7 @@ export default function Monitoring() {
             </div>
           ) : (
             <Player
+              onSoftwareHevcChange={softwareNotice.onChange}
               videoUrl={currentStreamUrl}
               videoRendererInstance={playerRef}
               streamWidth={activeStreamInfo?.width}

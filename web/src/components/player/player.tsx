@@ -23,6 +23,7 @@ import {
 import { resolveFrozenFrameSource } from './freezeFrame';
 
 type PlayerProps = {
+  onSoftwareHevcChange?: (active: boolean) => void;
   videoUrl: string;
   videoRendererInstance: React.RefObject<VideoStreamPlayer | null>;
   showPanel?: boolean;
@@ -60,6 +61,7 @@ const FROZEN_FRAME_RELEASE_DELAY_MS = 500;
 const FROZEN_FRAME_MAX_HOLD_MS = 2000;
 
 export default function Player({
+  onSoftwareHevcChange,
   videoUrl,
   videoRendererInstance,
   showPanel = true,
@@ -131,7 +133,7 @@ export default function Player({
   // useAudioTalk owns the click-to-toggle talk engine (PC mic → device
   // speaker) + device audio-status sync (captureAvailable / playbackEnabled),
   // refreshed on mount, window-focus, and cross-page Peripheral events.
-  const { talking, level, toggleTalk } = useAudioTalk({
+  const { talking, toggleTalk } = useAudioTalk({
     enabled: audioOverlay,
   });
 
@@ -388,7 +390,9 @@ export default function Player({
       });
       if (isCancelled) return;
 
-      videoRendererInstance.current = new VideoStreamPlayer();
+      videoRendererInstance.current = new VideoStreamPlayer({
+        objectFit: objectFit === 'cover' ? 'cover' : 'contain',
+      });
       videoRendererInstance.current.initPlayer(video);
       const dims = snapshotDimsRef.current;
       if (dims) {
@@ -419,7 +423,21 @@ export default function Player({
         audioPlayerRef.current = null;
       }
     };
-  }, [videoUrl]);
+  }, [videoUrl, objectFit]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onSoftwareHevc = (event: Event) => {
+      const active = (event as CustomEvent<boolean>).detail;
+      onSoftwareHevcChange?.(active);
+    };
+    video.addEventListener('aipc:software-hevc', onSoftwareHevc);
+    return () => {
+      video.removeEventListener('aipc:software-hevc', onSoftwareHevc);
+      onSoftwareHevcChange?.(false);
+    };
+  }, [onSoftwareHevcChange]);
 
   // Autoplay fallback. Audio starts on mount in the effect above, but if this
   // is a cold page-load with no prior user activation in the document the
@@ -484,7 +502,6 @@ export default function Player({
 
   const handleReload = () => {
     videoRendererInstance.current?.resetStartState().start(videoUrl);
-    setLoading(false);
   };
 
   // Keep latest handleReload in a ref so the global reload listener (subscribed
@@ -633,7 +650,7 @@ export default function Player({
           && pendingVideoFrameCallbackRef.current === null
         ) {
           const video = videoRef.current;
-          if (video && typeof video.requestVideoFrameCallback === 'function') {
+          if (video && video.style.display !== 'none' && typeof video.requestVideoFrameCallback === 'function') {
             pendingVideoFrameCallbackRef.current = video.requestVideoFrameCallback(
               () => {
                 pendingVideoFrameCallbackRef.current = null;
@@ -839,7 +856,6 @@ export default function Player({
             onVolumeChange={setVolume}
             captureAvailable={captureAvailable}
             talking={talking}
-            talkLevel={level}
             onToggleTalk={toggleTalk}
             playbackEnabled={playbackEnabled}
           />

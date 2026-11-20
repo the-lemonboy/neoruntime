@@ -76,12 +76,12 @@ describe('Monitoring encoder reconfiguration', () => {
     state.hevcSupported = true;
   });
 
-  it('shows an unsupported preview for H.265 without changing streams', () => {
+  it('starts H.265 playback even when the MSE probe does not support it', () => {
     state.codec = 'h265';
     state.hevcSupported = false;
     render(<Monitoring />);
-    expect(screen.getByRole('status').textContent).toContain('不支持 H.265');
-    expect(screen.queryByTestId('player')).toBeNull();
+    expect(screen.getByTestId('player').getAttribute('data-video-url')).toContain('/main?');
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('plays H.265 when supported and handles a runtime codec mismatch', () => {
